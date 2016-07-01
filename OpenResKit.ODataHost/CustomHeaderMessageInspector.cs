@@ -14,7 +14,9 @@
 
 #endregion
 
+using System;
 using System.Collections.Generic;
+using System.Net;
 using System.ServiceModel;
 using System.ServiceModel.Channels;
 using System.ServiceModel.Dispatcher;
@@ -32,12 +34,33 @@ namespace OpenResKit.ODataHost
 
     public object AfterReceiveRequest(ref Message request, IClientChannel channel, InstanceContext instanceContext)
     {
-      return null;
-    }
+            var httpRequest = (HttpRequestMessageProperty)request
+                      .Properties[HttpRequestMessageProperty.Name];
+
+            return new
+            {
+                origin = httpRequest.Headers["Origin"],
+                handlePreflight = httpRequest.Method.Equals("OPTIONS",
+                    StringComparison.InvariantCultureIgnoreCase)
+            };
+        }
 
     public void BeforeSendReply(ref Message reply, object correlationState)
     {
-      var httpHeader = reply.Properties["httpResponse"] as HttpResponseMessageProperty;
+            var state = (dynamic)correlationState;
+
+            if (state.handlePreflight)
+            {
+                reply = Message.CreateMessage(MessageVersion.None, "PreflightReturn");
+
+                var httpResponse = new HttpResponseMessageProperty();
+                reply.Properties.Add(HttpResponseMessageProperty.Name, httpResponse);
+
+                httpResponse.SuppressEntityBody = true;
+                httpResponse.StatusCode = HttpStatusCode.OK;
+            }
+
+            var httpHeader = reply.Properties["httpResponse"] as HttpResponseMessageProperty;
       foreach (var item in m_RequiredHeaders)
       {
         httpHeader.Headers.Add(item.Key, item.Value);
